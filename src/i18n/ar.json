@@ -6,5 +6,10 @@
     "product": "المنتج",
     "about": "عن لفارا",
     "contact": "تواصل"
+  },
+  "hero": {
+    "from_earth": "من الأرض",
+    "natural": "طبيعي 100%",
+    "experience": "25 عاماً من الخبرة"
   }
 }

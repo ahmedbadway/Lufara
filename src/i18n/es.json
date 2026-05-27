@@ -6,5 +6,10 @@
     "product": "Producto",
     "about": "Nosotros",
     "contact": "Contacto"
+  },
+  "hero": {
+    "from_earth": "De la tierra",
+    "natural": "100% Natural",
+    "experience": "25 años de experiencia"
   }
 }
