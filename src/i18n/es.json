@@ -1,0 +1,10 @@
+{
+  "brand": "Lufara",
+  "tagline": "Natural desde la semilla",
+  "nav": {
+    "home": "Inicio",
+    "product": "Producto",
+    "about": "Nosotros",
+    "contact": "Contacto"
+  }
+}
