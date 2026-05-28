@@ -1,17 +1,16 @@
-import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
+import { useRef, useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getLenis } from '../lib/lenisInstance'
 
-const FALLBACK_DURATION = 30
-const PARTICLE_COUNT = 20
+const SEGMENT_SECONDS = 10
+const TOTAL_SEGMENTS = 3
+const STEP_DEBOUNCE_MS = 250
 
-// 11 anchor times → 10 segments of equal length. With a 30s clip that's
-// 0, 3, 6, …, 30. The user-facing "10 dots" maps to the 10 segment endpoints.
-const SEGMENT_ANCHORS_REL = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-const TOTAL_SEGMENTS = SEGMENT_ANCHORS_REL.length - 1 // 10
-const REVERSE_STEP = 0.1 // seconds of video time dropped per 16ms tick
-const REVERSE_TICK_MS = 16
+const OVERLAYS = {
+  1: 'من الأرض / De la tierra',
+  2: 'طبيعي 100% / 100% Natural',
+  3: 'Lufara — Natural desde la semilla',
+}
 
 function OverlayText({ visible, children }) {
   return (
@@ -22,9 +21,9 @@ function OverlayText({ visible, children }) {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.5, ease: 'easeOut' }}
-          className="absolute inset-0 flex items-center justify-center pointer-events-none"
+          className="absolute inset-0 flex items-center justify-center pointer-events-none px-6"
         >
-          <div className="bg-dark/40 backdrop-blur-xs rounded-2xl px-10 py-6 max-w-xl text-center">
+          <div className="bg-dark/40 backdrop-blur-xs rounded-2xl px-8 py-5 max-w-2xl text-center">
             {children}
           </div>
         </motion.div>
@@ -33,91 +32,10 @@ function OverlayText({ visible, children }) {
   )
 }
 
-function Particles({ progress }) {
-  const particles = useMemo(() => {
-    let seed = 1
-    const rand = () => {
-      seed = (seed * 9301 + 49297) % 233280
-      return seed / 233280
-    }
-    return Array.from({ length: PARTICLE_COUNT }, () => ({
-      x: rand() * 100,
-      y: rand() * 100,
-      size: 3 + rand() * 6,
-      speed: 1 + rand() * 0.4,
-      delay: rand() * 2,
-    }))
-  }, [])
-
-  const fade = Math.max(0, 1 - progress * 1.3)
-
-  return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden">
-      {particles.map((p, i) => (
-        <motion.span
-          key={i}
-          aria-hidden
-          className="absolute rounded-full bg-cream"
-          style={{
-            left: `${p.x}%`,
-            top: `${p.y}%`,
-            width: p.size,
-            height: p.size,
-            opacity: 0.3 * fade,
-            transform: `translate3d(0, ${-progress * 220 * p.speed}px, 0)`,
-            willChange: 'transform, opacity',
-          }}
-          animate={{ y: [0, -8, 0] }}
-          transition={{
-            duration: 3 + p.delay,
-            repeat: Infinity,
-            ease: 'easeInOut',
-            delay: p.delay,
-          }}
-        />
-      ))}
-    </div>
-  )
-}
-
-function ParallaxBackground({ progress }) {
-  return (
-    <div
-      aria-hidden
-      className="absolute inset-0 pointer-events-none"
-      style={{
-        background:
-          'radial-gradient(circle at 30% 20%, rgba(196,169,98,0.18), transparent 55%), radial-gradient(circle at 70% 80%, rgba(107,143,113,0.18), transparent 55%), #2C2C2C',
-        transform: `translate3d(0, ${progress * 60}px, 0)`,
-        willChange: 'transform',
-      }}
-    />
-  )
-}
-
-function DownArrow() {
-  return (
-    <motion.svg
-      width="40"
-      height="40"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="white"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      animate={{ y: [0, 8, 0] }}
-      transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
-    >
-      <path d="M12 5v14M5 12l7 7 7-7" />
-    </motion.svg>
-  )
-}
-
 function SegmentDots({ active, total, onJump, hidden }) {
   return (
     <div
-      className={`absolute end-4 md:end-8 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 z-20 transition-opacity duration-300 ${
+      className={`absolute end-4 md:end-8 top-1/2 -translate-y-1/2 flex flex-col gap-3 z-20 transition-opacity duration-300 ${
         hidden ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
     >
@@ -129,12 +47,12 @@ function SegmentDots({ active, total, onJump, hidden }) {
             type="button"
             aria-label={`Jump to segment ${i + 1}`}
             onClick={() => onJump(i + 1)}
-            className="group p-1.5 cursor-pointer"
+            className="group p-2 cursor-pointer"
           >
             <span
               className={`block rounded-full transition-all duration-300 ${
                 filled
-                  ? 'bg-cream w-2.5 h-2.5'
+                  ? 'bg-cream w-3 h-3'
                   : 'bg-cream/30 w-2 h-2 group-hover:bg-cream/60'
               }`}
             />
@@ -145,47 +63,18 @@ function SegmentDots({ active, total, onJump, hidden }) {
   )
 }
 
-function ScrollHint() {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: [0.4, 1, 0.4], y: [0, 6, 0] }}
-      transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
-      className="absolute bottom-10 inset-x-0 flex flex-col items-center gap-2 text-cream/80 pointer-events-none z-20"
-    >
-      <span className="font-kufi text-xs tracking-wider uppercase">scroll</span>
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 5v14M5 12l7 7 7-7" />
-      </svg>
-    </motion.div>
-  )
-}
-
 export default function Hero() {
-  const { t, i18n } = useTranslation()
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const primedRef = useRef(false)
   const lockedRef = useRef(false)
   const completedRef = useRef(false)
-  const segmentIdxRef = useRef(0)
-  const [segmentIdx, setSegmentIdx] = useState(0)
+  const segmentRef = useRef(0)
+  const [segment, setSegment] = useState(0)
   const [completed, setCompleted] = useState(false)
   const [ready, setReady] = useState(false)
-  const [duration, setDuration] = useState(FALLBACK_DURATION)
 
-  const isArabic = i18n.language === 'ar'
-  const fontClass = isArabic ? 'font-kufi' : 'font-playfair'
-
-  const segments = useMemo(
-    () => SEGMENT_ANCHORS_REL.map((p) => p * duration),
-    [duration],
-  )
-
-  // Smooth progress for parallax — derived from segment index, not scroll.
-  const parallaxProgress = segmentIdx / TOTAL_SEGMENTS
-
-  // --- Canvas paint loop (draws whatever frame the video has) -----------
+  // Paint loop — draw whatever frame the video has decoded onto the canvas.
   useEffect(() => {
     if (!ready) return
     const video = videoRef.current
@@ -193,17 +82,11 @@ export default function Hero() {
     if (!video || !canvas) return
 
     const ctx = canvas.getContext('2d', { alpha: false })
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    canvas.width = Math.max(1, Math.round((video.videoWidth || 1280) * dpr))
+    canvas.height = Math.max(1, Math.round((video.videoHeight || 720) * dpr))
+
     let raf = null
-
-    const resizeCanvas = () => {
-      const vw = video.videoWidth || 1280
-      const vh = video.videoHeight || 720
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
-      canvas.width = Math.max(1, Math.round(vw * dpr))
-      canvas.height = Math.max(1, Math.round(vh * dpr))
-    }
-    resizeCanvas()
-
     const loop = () => {
       if (video.readyState >= 2) {
         try {
@@ -215,38 +98,31 @@ export default function Hero() {
       raf = requestAnimationFrame(loop)
     }
     raf = requestAnimationFrame(loop)
-
-    return () => {
-      if (raf) cancelAnimationFrame(raf)
-    }
+    return () => { if (raf) cancelAnimationFrame(raf) }
   }, [ready])
 
-  // --- Step controls ----------------------------------------------------
-  const finishStep = useCallback((nextIdx) => {
-    segmentIdxRef.current = nextIdx
-    setSegmentIdx(nextIdx)
-    if (nextIdx >= TOTAL_SEGMENTS) {
-      completedRef.current = true
-      setCompleted(true)
-      // Unlock page scroll so the next wheel/touch drives Product into view.
-      const lenis = getLenis()
-      if (lenis) lenis.start()
-      document.body.style.overflow = ''
-    }
-    // Debounce so a single wheel inertia burst doesn't fire multiple steps.
-    setTimeout(() => {
-      lockedRef.current = false
-    }, 250)
+  const unlockPage = useCallback(() => {
+    completedRef.current = true
+    setCompleted(true)
+    const lenis = getLenis()
+    if (lenis) lenis.start()
+    document.body.style.overflow = ''
   }, [])
 
   const stepForward = useCallback(() => {
     const video = videoRef.current
     if (!video || lockedRef.current || completedRef.current) return
-    const current = segmentIdxRef.current
+    const current = segmentRef.current
     if (current >= TOTAL_SEGMENTS) return
-    const nextIdx = current + 1
-    const endTime = segments[nextIdx]
+    const startTime = current * SEGMENT_SECONDS
+    const endTime = (current + 1) * SEGMENT_SECONDS
     lockedRef.current = true
+
+    try {
+      video.currentTime = startTime
+    } catch {
+      // ignore
+    }
 
     const onTimeUpdate = () => {
       if (video.currentTime >= endTime - 0.04) {
@@ -257,7 +133,11 @@ export default function Hero() {
         } catch {
           // ignore
         }
-        finishStep(nextIdx)
+        const next = current + 1
+        segmentRef.current = next
+        setSegment(next)
+        if (next >= TOTAL_SEGMENTS) unlockPage()
+        setTimeout(() => { lockedRef.current = false }, STEP_DEBOUNCE_MS)
       }
     }
     video.addEventListener('timeupdate', onTimeUpdate)
@@ -265,101 +145,66 @@ export default function Hero() {
     const playPromise = video.play()
     if (playPromise && typeof playPromise.then === 'function') {
       playPromise.catch(() => {
-        // Autoplay was blocked — fall back to a snap seek.
+        // Autoplay rejected — snap to the segment end and continue.
         video.removeEventListener('timeupdate', onTimeUpdate)
         try {
           video.currentTime = endTime
         } catch {
           // ignore
         }
-        finishStep(nextIdx)
+        const next = current + 1
+        segmentRef.current = next
+        setSegment(next)
+        if (next >= TOTAL_SEGMENTS) unlockPage()
+        setTimeout(() => { lockedRef.current = false }, STEP_DEBOUNCE_MS)
       })
     }
-  }, [segments, finishStep])
+  }, [unlockPage])
 
   const stepBackward = useCallback(() => {
     const video = videoRef.current
     if (!video || lockedRef.current) return
-    const current = segmentIdxRef.current
+    const current = segmentRef.current
     if (current <= 0) return
-    const prevIdx = current - 1
-    const targetTime = segments[prevIdx]
+    const prev = current - 1
     lockedRef.current = true
-
-    // Update dot state immediately so the indicator unfills as the rewind plays.
-    segmentIdxRef.current = prevIdx
-    setSegmentIdx(prevIdx)
-
     try {
       video.pause()
+      video.currentTime = prev * SEGMENT_SECONDS
     } catch {
       // ignore
     }
+    segmentRef.current = prev
+    setSegment(prev)
+    setTimeout(() => { lockedRef.current = false }, STEP_DEBOUNCE_MS)
+  }, [])
 
-    // Simulated reverse playback: decrement currentTime in small chunks
-    // until we land on the previous anchor.
-    const interval = setInterval(() => {
-      const next = video.currentTime - REVERSE_STEP
-      if (next <= targetTime + 0.02) {
-        clearInterval(interval)
-        try {
-          video.currentTime = targetTime
-        } catch {
-          // ignore
-        }
-        setTimeout(() => {
-          lockedRef.current = false
-        }, 250)
-      } else {
-        try {
-          video.currentTime = next
-        } catch {
-          // ignore
-        }
-      }
-    }, REVERSE_TICK_MS)
-  }, [segments])
+  const jumpTo = useCallback((target) => {
+    const video = videoRef.current
+    if (!video || lockedRef.current) return
+    const clamped = Math.min(TOTAL_SEGMENTS, Math.max(0, target))
+    if (clamped === segmentRef.current) return
+    lockedRef.current = true
+    try {
+      video.pause()
+      video.currentTime = clamped * SEGMENT_SECONDS
+    } catch {
+      // ignore
+    }
+    segmentRef.current = clamped
+    setSegment(clamped)
+    if (clamped >= TOTAL_SEGMENTS) unlockPage()
+    setTimeout(() => { lockedRef.current = false }, STEP_DEBOUNCE_MS)
+  }, [unlockPage])
 
-  const jumpTo = useCallback(
-    (idx) => {
-      const video = videoRef.current
-      if (!video || lockedRef.current) return
-      const clamped = Math.min(TOTAL_SEGMENTS, Math.max(0, idx))
-      if (clamped === segmentIdxRef.current) return
-      lockedRef.current = true
-      try {
-        video.pause()
-        video.currentTime = segments[clamped]
-      } catch {
-        // ignore
-      }
-      segmentIdxRef.current = clamped
-      setSegmentIdx(clamped)
-      if (clamped >= TOTAL_SEGMENTS) {
-        completedRef.current = true
-        setCompleted(true)
-        const lenis = getLenis()
-        if (lenis) lenis.start()
-        document.body.style.overflow = ''
-      }
-      setTimeout(() => {
-        lockedRef.current = false
-      }, 200)
-    },
-    [segments],
-  )
-
-  // --- Scroll lock + wheel/touch handlers -------------------------------
+  // Lock page scroll while stepping; wire wheel/touch/keyboard.
   useEffect(() => {
     if (!ready) return
-
-    // Lock global scroll while we're driving the hero.
     const lenis = getLenis()
     if (lenis) lenis.stop()
     document.body.style.overflow = 'hidden'
 
     let touchStartY = 0
-
     const onWheel = (e) => {
       if (completedRef.current) return
       e.preventDefault()
@@ -367,19 +212,14 @@ export default function Hero() {
       if (e.deltaY > 5) stepForward()
       else if (e.deltaY < -5) stepBackward()
     }
-
-    const onTouchStart = (e) => {
-      touchStartY = e.touches[0].clientY
-    }
-
+    const onTouchStart = (e) => { touchStartY = e.touches[0].clientY }
     const onTouchEnd = (e) => {
       if (completedRef.current) return
-      const deltaY = touchStartY - e.changedTouches[0].clientY
-      if (Math.abs(deltaY) < 50) return
-      if (deltaY > 0) stepForward()
+      const dy = touchStartY - e.changedTouches[0].clientY
+      if (Math.abs(dy) < 50) return
+      if (dy > 0) stepForward()
       else stepBackward()
     }
-
     const onKey = (e) => {
       if (completedRef.current) return
       if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
@@ -401,7 +241,6 @@ export default function Hero() {
       window.removeEventListener('touchstart', onTouchStart)
       window.removeEventListener('touchend', onTouchEnd)
       window.removeEventListener('keydown', onKey)
-      // If the user navigates away mid-flow, restore page scroll.
       if (!completedRef.current) {
         const l = getLenis()
         if (l) l.start()
@@ -410,7 +249,7 @@ export default function Hero() {
     }
   }, [ready, stepForward, stepBackward])
 
-  // --- Priming + metadata ----------------------------------------------
+  // iOS needs play() called at least once before currentTime seeks paint.
   const primeVideo = useCallback(() => {
     const video = videoRef.current
     if (!video || primedRef.current) return
@@ -424,17 +263,11 @@ export default function Hero() {
         })
         .catch(() => {
           primedRef.current = false
-          // Will retry on first user gesture via wheel/touch handlers.
         })
     }
   }, [])
 
   const handleMetadata = () => {
-    const video = videoRef.current
-    if (!video) return
-    if (Number.isFinite(video.duration) && video.duration > 0) {
-      setDuration(video.duration)
-    }
     setReady(true)
     primeVideo()
   }
@@ -445,8 +278,6 @@ export default function Hero() {
         className="relative h-screen w-full overflow-hidden bg-dark"
         style={{ willChange: 'transform', transform: 'translateZ(0)' }}
       >
-        <ParallaxBackground progress={parallaxProgress} />
-
         <video
           ref={videoRef}
           src="/Lufara/videos/lufara_combined.mp4"
@@ -466,49 +297,32 @@ export default function Hero() {
           className="absolute inset-0 w-full h-full object-cover"
         />
 
-        <Particles progress={parallaxProgress} />
+        <div className="absolute inset-0 bg-dark/25 pointer-events-none" />
 
-        <div className="absolute inset-0 bg-dark/20 pointer-events-none" />
-
-        <OverlayText visible={segmentIdx === 0 || segmentIdx === 1}>
-          <h1 className="font-playfair text-4xl md:text-6xl font-bold text-white mb-3">
-            Lufara
-          </h1>
-          <p className={`${fontClass} text-lg md:text-xl text-white/90`}>
-            {t('tagline')}
+        <OverlayText visible={segment === 1}>
+          <p className="font-kufi text-2xl md:text-4xl font-semibold text-white">
+            {OVERLAYS[1]}
           </p>
         </OverlayText>
 
-        <OverlayText visible={segmentIdx === 2 || segmentIdx === 3}>
-          <p className={`${fontClass} text-2xl md:text-4xl font-semibold text-white`}>
-            {t('hero.from_earth')}
+        <OverlayText visible={segment === 2}>
+          <p className="font-kufi text-2xl md:text-4xl font-semibold text-white">
+            {OVERLAYS[2]}
           </p>
         </OverlayText>
 
-        <OverlayText visible={segmentIdx === 4 || segmentIdx === 5}>
-          <p className={`${fontClass} text-2xl md:text-4xl font-semibold text-white`}>
-            {t('hero.natural')}
+        <OverlayText visible={segment === 3}>
+          <p className="font-playfair text-2xl md:text-4xl font-semibold text-white">
+            {OVERLAYS[3]}
           </p>
-        </OverlayText>
-
-        <OverlayText visible={segmentIdx === 6 || segmentIdx === 7}>
-          <p className={`${fontClass} text-2xl md:text-4xl font-semibold text-white`}>
-            {t('hero.experience')}
-          </p>
-        </OverlayText>
-
-        <OverlayText visible={segmentIdx === 8 || segmentIdx === 9}>
-          <DownArrow />
         </OverlayText>
 
         <SegmentDots
-          active={segmentIdx}
+          active={segment}
           total={TOTAL_SEGMENTS}
           onJump={jumpTo}
           hidden={completed}
         />
-
-        {!completed && segmentIdx === 0 && <ScrollHint />}
       </div>
     </section>
   )
