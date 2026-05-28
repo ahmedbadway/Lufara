@@ -114,7 +114,7 @@ export default function Hero() {
       <div className="sticky top-0 h-screen w-full overflow-hidden">
         <video
           ref={videoRef}
-          src="/lufara/videos/lufara_combined.mp4"
+          src="/Lufara/videos/lufara_combined.mp4"
           muted
           playsInline
           preload="auto"
