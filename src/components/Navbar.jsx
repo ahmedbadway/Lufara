@@ -11,18 +11,23 @@ const NAV_LINKS = [
 export default function Navbar() {
   const { t, i18n } = useTranslation()
   const [pastHero, setPastHero] = useState(false)
+  const [scrollDepth, setScrollDepth] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
-    // Hero section is 400vh tall with a sticky 100vh child, so the pinned
-    // scroll range ends at scrollY = 3 * viewport height. Show the navbar
-    // only once the user has scrolled past it.
+    // Hero section is 400vh tall with a sticky 100vh child; reveal navbar
+    // once the user has scrolled past the pinned scroll range. Also track
+    // scroll depth (0–1 past the hero) to drive logo size + backdrop blur.
     let ticking = false
     let rafId = null
 
     const compute = () => {
       ticking = false
-      setPastHero(window.scrollY > window.innerHeight * 3 - 80)
+      const threshold = window.innerHeight * 3 - 80
+      setPastHero(window.scrollY > threshold)
+      const past = Math.max(0, window.scrollY - threshold)
+      // Saturate around 600px past hero.
+      setScrollDepth(Math.min(1, past / 600))
     }
 
     const onScroll = () => {
@@ -53,44 +58,79 @@ export default function Navbar() {
     if (el) el.scrollIntoView({ behavior: 'smooth' })
   }
 
+  // Morphing values — logo shrinks, links nudge upward, blur deepens.
+  const logoSize = 1.5 - scrollDepth * 0.5 // rem
+  const linkOffset = -scrollDepth * 2 // px
+  const blurAmount = 4 + scrollDepth * 12 // px
+
   return (
-    <nav
-      className={`fixed top-0 inset-x-0 z-50 transition-all duration-500 ${
-        pastHero
-          ? 'translate-y-0 opacity-100 bg-cream/95 shadow-md backdrop-blur-sm pointer-events-auto'
-          : '-translate-y-full opacity-0 pointer-events-none'
+    <motion.nav
+      initial={{ y: -100, opacity: 0 }}
+      animate={{
+        y: pastHero ? 0 : -100,
+        opacity: pastHero ? 1 : 0,
+      }}
+      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+      className={`fixed top-0 inset-x-0 z-50 ${
+        pastHero ? 'pointer-events-auto' : 'pointer-events-none'
       }`}
+      style={{
+        backgroundColor: `rgba(250, 247, 242, ${0.85 + scrollDepth * 0.1})`,
+        backdropFilter: `blur(${blurAmount}px)`,
+        WebkitBackdropFilter: `blur(${blurAmount}px)`,
+        boxShadow: `0 ${4 + scrollDepth * 4}px ${12 + scrollDepth * 12}px -8px rgba(44,44,44,${0.08 + scrollDepth * 0.08})`,
+      }}
     >
       <div className="mx-auto max-w-7xl flex items-center justify-between px-6 py-4">
-        <a
+        <motion.a
           href="#"
-          className="font-playfair text-2xl font-bold text-primary tracking-wide"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.5 }}
+          className="font-playfair font-bold text-primary tracking-wide"
+          style={{ fontSize: `${logoSize}rem` }}
         >
           Lufara
-        </a>
+        </motion.a>
 
-        {/* Desktop links */}
-        <div className="hidden md:flex items-center gap-8">
-          {NAV_LINKS.map(({ key, href }) => (
-            <a
+        <div className="hidden md:flex items-center gap-8" style={{ transform: `translateY(${linkOffset}px)` }}>
+          {NAV_LINKS.map(({ key, href }, i) => (
+            <motion.a
               key={key}
               href={href}
               onClick={(e) => scrollTo(e, href)}
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.6 + i * 0.1 }}
               className="font-kufi text-sm text-dark hover:text-primary transition-colors"
             >
               {t(`nav.${key}`)}
-            </a>
+            </motion.a>
           ))}
 
-          <button
+          <motion.button
             onClick={toggleLanguage}
-            className="border border-primary/30 rounded-full px-4 py-1.5 text-xs font-kufi text-primary hover:bg-primary hover:text-cream transition-colors cursor-pointer"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.9 }}
+            whileTap={{ scale: 0.95 }}
+            className="relative overflow-hidden border border-primary/30 rounded-full px-4 py-1.5 text-xs font-kufi text-primary hover:bg-primary hover:text-cream transition-colors cursor-pointer"
           >
-            {i18n.language === 'ar' ? 'ES' : 'AR'}
-          </button>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span
+                key={i18n.language}
+                initial={{ y: 14, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: -14, opacity: 0 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
+                className="inline-block"
+              >
+                {i18n.language === 'ar' ? 'ES' : 'AR'}
+              </motion.span>
+            </AnimatePresence>
+          </motion.button>
         </div>
 
-        {/* Mobile hamburger */}
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           className="md:hidden flex flex-col justify-center gap-1.5 w-8 h-8 cursor-pointer"
@@ -114,7 +154,6 @@ export default function Navbar() {
         </button>
       </div>
 
-      {/* Mobile menu */}
       <AnimatePresence>
         {menuOpen && (
           <motion.div
@@ -145,6 +184,6 @@ export default function Navbar() {
           </motion.div>
         )}
       </AnimatePresence>
-    </nav>
+    </motion.nav>
   )
 }

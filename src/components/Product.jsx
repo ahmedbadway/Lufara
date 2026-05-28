@@ -1,14 +1,15 @@
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { motion } from 'framer-motion'
+import { motion, useInView, useScroll, useTransform } from 'framer-motion'
 
 const WHATSAPP_URL = 'https://wa.me/201111111111'
 
 const cardVariants = {
-  hidden: { opacity: 0, y: 40 },
+  hidden: { opacity: 0, y: 60 },
   visible: (i) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: i * 0.2, duration: 0.6, ease: 'easeOut' },
+    transition: { delay: i * 0.2, duration: 0.7, ease: [0.22, 1, 0.36, 1] },
   }),
 }
 
@@ -25,24 +26,65 @@ function FeatureList({ features }) {
   )
 }
 
+function PriceCounter({ price, inView }) {
+  // Pulls the integer out of a price string like "5€" or "250 EGP" and counts
+  // up to it when the card enters view. Non-numeric parts are preserved.
+  const match = /^(\d+)(.*)$/.exec(price.trim())
+  const target = match ? parseInt(match[1], 10) : null
+  const suffix = match ? match[2] : ''
+  const [value, setValue] = useState(target ?? 0)
+
+  useEffect(() => {
+    if (!inView || target == null) return
+    let raf
+    const duration = 1000
+    const start = performance.now()
+    const step = (now) => {
+      const t = Math.min((now - start) / duration, 1)
+      const eased = 1 - Math.pow(1 - t, 3)
+      setValue(Math.round(eased * target))
+      if (t < 1) raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [inView, target])
+
+  if (target == null) {
+    return <span className="text-accent text-3xl font-bold font-playfair">{price}</span>
+  }
+  return (
+    <span className="text-accent text-3xl font-bold font-playfair">
+      {value}
+      {suffix}
+    </span>
+  )
+}
+
 function ProductCard({ image, icon, title, price, originalPrice, features, badge, index }) {
   const { t } = useTranslation()
+  const cardRef = useRef(null)
+  const inView = useInView(cardRef, { once: true, amount: 0.4 })
 
   return (
     <motion.div
+      ref={cardRef}
       custom={index}
       variants={cardVariants}
       initial="hidden"
       whileInView="visible"
       viewport={{ once: true, amount: 0.3 }}
-      whileHover={{ y: -6 }}
-      transition={{ type: 'spring', stiffness: 300 }}
+      whileHover={{ y: -12, rotate: 1.5, boxShadow: '0 30px 60px -20px rgba(44,44,44,0.35)' }}
+      transition={{ type: 'spring', stiffness: 260, damping: 20 }}
       className="relative bg-white rounded-2xl shadow-lg overflow-hidden flex flex-col items-center text-center flex-1 max-w-sm"
     >
       {badge && (
-        <span className="absolute top-4 end-4 z-10 bg-accent text-white text-xs font-kufi font-semibold px-4 py-1 rounded-full">
+        <motion.span
+          animate={{ scale: [1, 1.08, 1] }}
+          transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute top-4 end-4 z-10 bg-accent text-white text-xs font-kufi font-semibold px-4 py-1 rounded-full shadow-md"
+        >
           {badge}
-        </span>
+        </motion.span>
       )}
 
       <img
@@ -62,7 +104,7 @@ function ProductCard({ image, icon, title, price, originalPrice, features, badge
               {originalPrice}
             </span>
           )}
-          <span className="text-accent text-3xl font-bold font-playfair">{price}</span>
+          <PriceCounter price={price} inView={inView} />
         </div>
 
         <FeatureList features={features} />
@@ -83,9 +125,21 @@ function ProductCard({ image, icon, title, price, originalPrice, features, badge
 export default function Product() {
   const { t } = useTranslation()
   const features = t('product.features', { returnObjects: true })
+  const sectionRef = useRef(null)
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ['start end', 'start center'],
+  })
+  // Slide the section up slightly as it enters, overlapping the hero by ~100px.
+  const slideY = useTransform(scrollYProgress, [0, 1], [100, 0])
 
   return (
-    <section id="product" className="bg-cream py-20 md:py-28 px-6">
+    <motion.section
+      ref={sectionRef}
+      id="product"
+      style={{ y: slideY }}
+      className="relative bg-cream py-20 md:py-28 px-6 z-10"
+    >
       <div className="max-w-4xl mx-auto">
         <motion.h2
           initial={{ opacity: 0, y: 20 }}
@@ -130,6 +184,6 @@ export default function Product() {
           </p>
         </motion.div>
       </div>
-    </section>
+    </motion.section>
   )
 }

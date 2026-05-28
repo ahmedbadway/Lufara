@@ -1,9 +1,10 @@
-import { useRef, useEffect, useState, useCallback } from 'react'
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion, AnimatePresence } from 'framer-motion'
 
 const FALLBACK_DURATION = 30
 const HERO_VH = 400
+const PARTICLE_COUNT = 20
 
 function useScrollProgress(sectionRef) {
   const [progress, setProgress] = useState(0)
@@ -38,14 +39,17 @@ function useScrollProgress(sectionRef) {
   return progress
 }
 
-function OverlayText({ visible, children }) {
+function OverlayText({ visible, progress, parallaxStrength = 80, children }) {
+  // Text drifts upward at ~0.8x the scroll progress within the sticky pin,
+  // giving it a slightly slower-than-scroll feel.
+  const offset = -progress * parallaxStrength
   return (
     <AnimatePresence>
       {visible && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: offset }}
+          exit={{ opacity: 0, y: offset - 20 }}
           transition={{ duration: 0.6, ease: 'easeOut' }}
           className="absolute inset-0 flex items-center justify-center pointer-events-none"
         >
@@ -55,6 +59,72 @@ function OverlayText({ visible, children }) {
         </motion.div>
       )}
     </AnimatePresence>
+  )
+}
+
+function Particles({ progress }) {
+  // 20 cream particles drifting at slightly different speeds (1.0x–1.4x).
+  // Opacity fades as the user nears the end of the hero.
+  const particles = useMemo(() => {
+    let seed = 1
+    const rand = () => {
+      seed = (seed * 9301 + 49297) % 233280
+      return seed / 233280
+    }
+    return Array.from({ length: PARTICLE_COUNT }, () => ({
+      x: rand() * 100,
+      y: rand() * 100,
+      size: 3 + rand() * 6,
+      speed: 1 + rand() * 0.4,
+      delay: rand() * 2,
+    }))
+  }, [])
+
+  const fade = Math.max(0, 1 - progress * 1.3)
+
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden">
+      {particles.map((p, i) => (
+        <motion.span
+          key={i}
+          aria-hidden
+          className="absolute rounded-full bg-cream"
+          style={{
+            left: `${p.x}%`,
+            top: `${p.y}%`,
+            width: p.size,
+            height: p.size,
+            opacity: 0.3 * fade,
+            transform: `translate3d(0, ${-progress * 220 * p.speed}px, 0)`,
+            willChange: 'transform, opacity',
+          }}
+          animate={{ y: [0, -8, 0] }}
+          transition={{
+            duration: 3 + p.delay,
+            repeat: Infinity,
+            ease: 'easeInOut',
+            delay: p.delay,
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+function ParallaxBackground({ progress }) {
+  // Soft cream gradient that drifts slowly behind the video — visible only
+  // when the video hasn't loaded yet or at the very edges of object-cover.
+  return (
+    <div
+      aria-hidden
+      className="absolute inset-0 pointer-events-none"
+      style={{
+        background:
+          'radial-gradient(circle at 30% 20%, rgba(196,169,98,0.18), transparent 55%), radial-gradient(circle at 70% 80%, rgba(107,143,113,0.18), transparent 55%), #2C2C2C',
+        transform: `translate3d(0, ${progress * 60}px, 0)`,
+        willChange: 'transform',
+      }}
+    />
   )
 }
 
@@ -261,6 +331,8 @@ export default function Hero() {
         className="sticky top-0 h-screen w-full overflow-hidden bg-dark"
         style={{ willChange: 'transform', transform: 'translateZ(0)' }}
       >
+        <ParallaxBackground progress={progress} />
+
         <video
           ref={videoRef}
           src="/Lufara/videos/lufara_combined.mp4"
@@ -275,15 +347,20 @@ export default function Hero() {
           onCanPlayThrough={preloadFrames}
           className="absolute inset-0 w-full h-full object-cover opacity-0 pointer-events-none"
         />
-        <canvas
+        <motion.canvas
           ref={canvasRef}
+          initial={{ scale: 1.05, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 1.1, ease: 'easeOut' }}
           style={{ willChange: 'transform', transform: 'translateZ(0)' }}
           className="absolute inset-0 w-full h-full object-cover"
         />
 
+        <Particles progress={progress} />
+
         <div className="absolute inset-0 bg-dark/20" />
 
-        <OverlayText visible={isVisible(0, 0.15)}>
+        <OverlayText visible={isVisible(0, 0.15)} progress={progress}>
           <h1 className="font-playfair text-4xl md:text-6xl font-bold text-white mb-3">
             Lufara
           </h1>
@@ -292,25 +369,25 @@ export default function Hero() {
           </p>
         </OverlayText>
 
-        <OverlayText visible={isVisible(0.2, 0.4)}>
+        <OverlayText visible={isVisible(0.2, 0.4)} progress={progress}>
           <p className={`${fontClass} text-2xl md:text-4xl font-semibold text-white`}>
             {t('hero.from_earth')}
           </p>
         </OverlayText>
 
-        <OverlayText visible={isVisible(0.45, 0.65)}>
+        <OverlayText visible={isVisible(0.45, 0.65)} progress={progress}>
           <p className={`${fontClass} text-2xl md:text-4xl font-semibold text-white`}>
             {t('hero.natural')}
           </p>
         </OverlayText>
 
-        <OverlayText visible={isVisible(0.7, 0.85)}>
+        <OverlayText visible={isVisible(0.7, 0.85)} progress={progress}>
           <p className={`${fontClass} text-2xl md:text-4xl font-semibold text-white`}>
             {t('hero.experience')}
           </p>
         </OverlayText>
 
-        <OverlayText visible={isVisible(0.9, 1)}>
+        <OverlayText visible={isVisible(0.9, 1)} progress={progress}>
           <DownArrow />
         </OverlayText>
 

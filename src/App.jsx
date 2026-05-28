@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+import Lenis from 'lenis'
 import './i18n'
 import Navbar from './components/Navbar'
 import Hero from './components/Hero'
@@ -7,6 +9,27 @@ import Contact from './components/Contact'
 import Footer from './components/Footer'
 
 function App() {
+  useEffect(() => {
+    const lenis = new Lenis({
+      duration: 1.2,
+      easing: (t) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t)),
+      touchMultiplier: 2,
+      smoothWheel: true,
+    })
+
+    let rafId
+    const raf = (time) => {
+      lenis.raf(time)
+      rafId = requestAnimationFrame(raf)
+    }
+    rafId = requestAnimationFrame(raf)
+
+    return () => {
+      cancelAnimationFrame(rafId)
+      lenis.destroy()
+    }
+  }, [])
+
   return (
     <div className="bg-cream min-h-screen">
       <Navbar />

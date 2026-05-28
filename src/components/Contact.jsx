@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { motion } from 'framer-motion'
+import { motion, useScroll, useTransform } from 'framer-motion'
 
 const WHATSAPP_URL = 'https://wa.me/201111111111'
 const EMAIL = 'hoshos@lufara.com'
@@ -29,9 +29,20 @@ function ContactItem({ icon, label, value, href }) {
 
 export default function Contact() {
   const { t } = useTranslation()
+  const sectionRef = useRef(null)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState('')
+
+  // Curtain reveal: a slightly darker accent band rises from below the
+  // already-dark section as the user scrolls in, giving the entrance a
+  // subtle theatrical lift without ever obscuring the content text.
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ['start end', 'start start'],
+  })
+  const curtainY = useTransform(scrollYProgress, [0, 1], ['100%', '0%'])
+  const curtainOpacity = useTransform(scrollYProgress, [0, 0.4, 1], [0, 0.8, 0.4])
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -44,8 +55,15 @@ export default function Contact() {
     'w-full bg-transparent border border-cream/20 rounded-xl px-4 py-3 text-cream font-kufi text-sm placeholder:text-cream/30 focus:outline-none focus:border-accent transition-colors'
 
   return (
-    <section id="contact" className="bg-dark py-20 md:py-28 px-6">
-      <div className="max-w-5xl mx-auto">
+    <section ref={sectionRef} id="contact" className="relative py-20 md:py-28 px-6 overflow-hidden bg-dark">
+      <motion.div
+        aria-hidden
+        style={{ y: curtainY, opacity: curtainOpacity }}
+        className="absolute inset-0 pointer-events-none"
+      >
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+      </motion.div>
+      <div className="relative max-w-5xl mx-auto">
         <div className="flex flex-col md:flex-row gap-14 md:gap-20">
           {/* Left — Contact info */}
           <motion.div
