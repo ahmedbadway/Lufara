@@ -6,10 +6,12 @@ import { getLenis } from '../lib/lenisInstance'
 const FALLBACK_DURATION = 30
 const PARTICLE_COUNT = 20
 
-// 6 anchor times → 5 segments between them. The user-facing "5 dots" maps
-// to the 5 segment endpoints (anchors 1..5).
-const SEGMENT_ANCHORS_REL = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
-const TOTAL_SEGMENTS = SEGMENT_ANCHORS_REL.length - 1 // 5
+// 11 anchor times → 10 segments of equal length. With a 30s clip that's
+// 0, 3, 6, …, 30. The user-facing "10 dots" maps to the 10 segment endpoints.
+const SEGMENT_ANCHORS_REL = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+const TOTAL_SEGMENTS = SEGMENT_ANCHORS_REL.length - 1 // 10
+const REVERSE_STEP = 0.1 // seconds of video time dropped per 16ms tick
+const REVERSE_TICK_MS = 16
 
 function OverlayText({ visible, children }) {
   return (
@@ -115,7 +117,7 @@ function DownArrow() {
 function SegmentDots({ active, total, onJump, hidden }) {
   return (
     <div
-      className={`absolute end-4 md:end-8 top-1/2 -translate-y-1/2 flex flex-col gap-3 z-20 transition-opacity duration-300 ${
+      className={`absolute end-4 md:end-8 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 z-20 transition-opacity duration-300 ${
         hidden ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
     >
@@ -127,12 +129,12 @@ function SegmentDots({ active, total, onJump, hidden }) {
             type="button"
             aria-label={`Jump to segment ${i + 1}`}
             onClick={() => onJump(i + 1)}
-            className="group p-2 cursor-pointer"
+            className="group p-1.5 cursor-pointer"
           >
             <span
               className={`block rounded-full transition-all duration-300 ${
                 filled
-                  ? 'bg-cream w-3 h-3'
+                  ? 'bg-cream w-2.5 h-2.5'
                   : 'bg-cream/30 w-2 h-2 group-hover:bg-cream/60'
               }`}
             />
@@ -281,18 +283,41 @@ export default function Hero() {
     const current = segmentIdxRef.current
     if (current <= 0) return
     const prevIdx = current - 1
+    const targetTime = segments[prevIdx]
     lockedRef.current = true
+
+    // Update dot state immediately so the indicator unfills as the rewind plays.
+    segmentIdxRef.current = prevIdx
+    setSegmentIdx(prevIdx)
+
     try {
       video.pause()
-      video.currentTime = segments[prevIdx]
     } catch {
       // ignore
     }
-    segmentIdxRef.current = prevIdx
-    setSegmentIdx(prevIdx)
-    setTimeout(() => {
-      lockedRef.current = false
-    }, 200)
+
+    // Simulated reverse playback: decrement currentTime in small chunks
+    // until we land on the previous anchor.
+    const interval = setInterval(() => {
+      const next = video.currentTime - REVERSE_STEP
+      if (next <= targetTime + 0.02) {
+        clearInterval(interval)
+        try {
+          video.currentTime = targetTime
+        } catch {
+          // ignore
+        }
+        setTimeout(() => {
+          lockedRef.current = false
+        }, 250)
+      } else {
+        try {
+          video.currentTime = next
+        } catch {
+          // ignore
+        }
+      }
+    }, REVERSE_TICK_MS)
   }, [segments])
 
   const jumpTo = useCallback(
@@ -445,7 +470,7 @@ export default function Hero() {
 
         <div className="absolute inset-0 bg-dark/20 pointer-events-none" />
 
-        <OverlayText visible={segmentIdx === 0}>
+        <OverlayText visible={segmentIdx === 0 || segmentIdx === 1}>
           <h1 className="font-playfair text-4xl md:text-6xl font-bold text-white mb-3">
             Lufara
           </h1>
@@ -454,25 +479,25 @@ export default function Hero() {
           </p>
         </OverlayText>
 
-        <OverlayText visible={segmentIdx === 1}>
+        <OverlayText visible={segmentIdx === 2 || segmentIdx === 3}>
           <p className={`${fontClass} text-2xl md:text-4xl font-semibold text-white`}>
             {t('hero.from_earth')}
           </p>
         </OverlayText>
 
-        <OverlayText visible={segmentIdx === 2}>
+        <OverlayText visible={segmentIdx === 4 || segmentIdx === 5}>
           <p className={`${fontClass} text-2xl md:text-4xl font-semibold text-white`}>
             {t('hero.natural')}
           </p>
         </OverlayText>
 
-        <OverlayText visible={segmentIdx === 3}>
+        <OverlayText visible={segmentIdx === 6 || segmentIdx === 7}>
           <p className={`${fontClass} text-2xl md:text-4xl font-semibold text-white`}>
             {t('hero.experience')}
           </p>
         </OverlayText>
 
-        <OverlayText visible={segmentIdx === 4}>
+        <OverlayText visible={segmentIdx === 8 || segmentIdx === 9}>
           <DownArrow />
         </OverlayText>
 
