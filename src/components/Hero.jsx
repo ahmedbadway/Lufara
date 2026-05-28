@@ -79,6 +79,7 @@ export default function Hero() {
   const sectionRef = useRef(null)
   const videoRef = useRef(null)
   const rafRef = useRef(null)
+  const primedRef = useRef(false)
   const progress = useScrollProgress(sectionRef)
   const [ready, setReady] = useState(false)
   const [duration, setDuration] = useState(FALLBACK_DURATION)
@@ -108,21 +109,23 @@ export default function Hero() {
 
   const primeVideo = useCallback(() => {
     const video = videoRef.current
-    if (!video) return
+    if (!video || primedRef.current) return
+    primedRef.current = true
     const playPromise = video.play()
     if (playPromise && typeof playPromise.then === 'function') {
       playPromise
         .then(() => {
           video.pause()
-          video.currentTime = 0
         })
         .catch(() => {
+          primedRef.current = false
           // Autoplay blocked — wait for a user gesture
           const unlock = () => {
-            video.play().then(() => {
-              video.pause()
-              video.currentTime = 0
-            }).catch(() => {})
+            if (primedRef.current) return
+            primedRef.current = true
+            video.play().then(() => video.pause()).catch(() => {
+              primedRef.current = false
+            })
             window.removeEventListener('touchstart', unlock)
             window.removeEventListener('click', unlock)
           }
