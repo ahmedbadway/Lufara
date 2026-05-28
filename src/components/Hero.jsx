@@ -2,15 +2,7 @@ import { useRef, useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion, AnimatePresence } from 'framer-motion'
 
-const OVERLAYS = [
-  { key: 'brand', start: 0, end: 0.15 },
-  { key: 'from_earth', start: 0.2, end: 0.4 },
-  { key: 'natural', start: 0.45, end: 0.65 },
-  { key: 'experience', start: 0.7, end: 0.85 },
-  { key: 'arrow', start: 0.9, end: 1 },
-]
-
-const VIDEO_DURATION = 30
+const FALLBACK_DURATION = 30
 
 function useScrollProgress(sectionRef) {
   const [progress, setProgress] = useState(0)
@@ -88,17 +80,24 @@ export default function Hero() {
   const videoRef = useRef(null)
   const rafRef = useRef(null)
   const progress = useScrollProgress(sectionRef)
+  const [ready, setReady] = useState(false)
+  const [duration, setDuration] = useState(FALLBACK_DURATION)
 
   const isArabic = i18n.language === 'ar'
   const fontClass = isArabic ? 'font-kufi' : 'font-playfair'
 
   const syncVideo = useCallback(() => {
-    if (!videoRef.current) return
-    const target = progress * VIDEO_DURATION
-    if (Math.abs(videoRef.current.currentTime - target) > 0.05) {
-      videoRef.current.currentTime = target
+    const video = videoRef.current
+    if (!video || !ready) return
+    const target = progress * duration
+    if (Math.abs(video.currentTime - target) > 0.1) {
+      try {
+        video.currentTime = target
+      } catch {
+        // ignore — video may not be seekable yet
+      }
     }
-  }, [progress])
+  }, [progress, ready, duration])
 
   useEffect(() => {
     rafRef.current = requestAnimationFrame(syncVideo)
@@ -107,17 +106,28 @@ export default function Hero() {
     }
   }, [syncVideo])
 
+  const handleMetadata = () => {
+    const video = videoRef.current
+    if (!video) return
+    if (Number.isFinite(video.duration) && video.duration > 0) {
+      setDuration(video.duration)
+    }
+    setReady(true)
+  }
+
   const isVisible = (start, end) => progress >= start && progress <= end
 
   return (
     <section ref={sectionRef} className="relative" style={{ height: '600vh' }}>
-      <div className="sticky top-0 h-screen w-full overflow-hidden">
+      <div className="sticky top-0 h-screen w-full overflow-hidden bg-dark">
         <video
           ref={videoRef}
           src="/Lufara/videos/lufara_combined.mp4"
           muted
           playsInline
           preload="auto"
+          onLoadedMetadata={handleMetadata}
+          onLoadedData={handleMetadata}
           className="absolute inset-0 w-full h-full object-cover"
         />
 
